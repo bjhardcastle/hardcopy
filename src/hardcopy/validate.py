@@ -15,6 +15,7 @@ else:
     from backports.strenum import StrEnum
 
 import crc32c
+
 from hardcopy.types import PathLike
 
 

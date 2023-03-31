@@ -1,0 +1,16 @@
+{
+    // Whitelist crc32c to remove lint errors
+    "python.linting.pylintArgs": [
+        "--extension-pkg-whitelist=crc32c"
+    ],
+    "workbench.colorCustomizations": {
+        "commandCenter.border": "#15202b99",
+        "panel.border": "#9ebfa7",
+        "sash.hoverBorder": "#9ebfa7",
+        "titleBar.activeBackground": "#7fab8b",
+        "titleBar.activeForeground": "#15202b",
+        "titleBar.inactiveBackground": "#7fab8b99",
+        "titleBar.inactiveForeground": "#15202b99"
+    },
+    "peacock.color": "#7fab8b"
+}

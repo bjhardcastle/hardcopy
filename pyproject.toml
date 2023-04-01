@@ -1,6 +1,6 @@
 [project]
 name = "hardcopy"
-version = "0.0.0"
+version = "0.0.1"
 description = "Copy tool with validation for Windows, wrapping Robocopy."
 authors = [
     {name = "bjhardcastle", email = "ben.hardcastle@alleninstitute.org"},
@@ -9,6 +9,7 @@ dependencies = [
     "typer[all]>=0.7.0",
     "crc32c>=2.0",
     "backports-strenum>=1.0.3",
+    "loguru>=0.6.0",
 ]
 requires-python = ">=3.7"
 readme = "README.md"
@@ -31,8 +32,8 @@ build = {composite = ["prebuild", "bump", "pdm build"]}
 dry-run = {composite = ["prebuild", "pdm build", "pdm publish --no-build --repository https://test.pypi.org/simple"]}
 publish = {composite = ["prebuild", "pdm build", "pdm publish --no-build"]}
 
-[tool.pdm.source]
-# name = "hardcopy"
+# [tool.pdm.source]
+# name = "hard-copy"
 
 [tool.pdm.dev-dependencies]
 dev = [

@@ -16,12 +16,11 @@ if sys.version_info >= (3, 11):
     from enum import StrEnum
 else:
     from backports.strenum import StrEnum
-
+    
 import crc32c
+from loguru import logger
 
 from hardcopy.types import PathLike
-
-logger = logging.getLogger(__name__)
 
 
 class Algorithms(StrEnum):
@@ -83,7 +82,8 @@ class ConcurrentValidater(DataValidater):
         """Return a checksum of the data at `path`, breaking into chunks if necessary."""
         return fn(path.read_bytes())
 
-    def get_checksum(self, path: PathLike) -> str | int:
+    @staticmethod
+    def get_checksum(path: pathlib.Path) -> str | int:
         """Return a checksum of the data at `path`.
 
         >>> tmpfile = tempfile.NamedTemporaryFile(delete=False).name
@@ -93,13 +93,10 @@ class ConcurrentValidater(DataValidater):
         >>> bool(ConcurrentValidater().get_checksum(tmpfile))
         True
         """
-        path = pathlib.Path(os.fsdecode(path))
-        future = self.processpool.submit(
-            self.checksum_in_chunks, crc32c.crc32c, path
-        )
-        return future.result()
+        return __class__.checksum_in_chunks(crc32c.crc32c, path)
 
-    def is_valid_copy(self, src: PathLike, *copy: PathLike) -> bool:
+
+    def is_valid_copy(self, src: pathlib.Path, *copy: pathlib.Path) -> bool:
         """Every `copy` has identical data to `src`.
 
         >>> tmpfile = tempfile.NamedTemporaryFile(delete=False).name
@@ -110,11 +107,15 @@ class ConcurrentValidater(DataValidater):
         >>> ConcurrentValidater().is_valid_copy(tmpfile, tmpfile, tmpfile2)
         False
         """
-        src = pathlib.Path(os.fsdecode(src))
         if src.is_dir():
             return self.is_valid_copytree(src, *copy)
-        target = self.get_checksum(src)
-        return all(self.get_checksum(path) == target for path in copy)
+        path_to_future = {
+            path: self.threadpool.submit(self.get_checksum, path) for path in (src, *copy)
+        }
+        # checksums = self.processpool.map(
+        #         self.get_checksum, (src, *copy)
+        #     )
+        return all(path_to_future[src].result() == path_to_future[c].result() for c in copy)
 
     def is_valid_copytree(self, src_dir: PathLike, copy_dir: PathLike) -> bool:
         """`copy_dir` has identical data to `src_dir`.
@@ -146,8 +147,8 @@ class ConcurrentValidater(DataValidater):
                 }
             )
         else:
-            for future in concurrent.futures.as_completed(future_to_path):
-                if not future.result():
+            for future in concurrent.futures.as_completed(f for f in future_to_path):
+                if future.result() == False:
                     bad_path = future_to_path[future]
                     break
             else:

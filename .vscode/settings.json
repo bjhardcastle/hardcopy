@@ -12,5 +12,7 @@
         "titleBar.inactiveBackground": "#7fab8b99",
         "titleBar.inactiveForeground": "#15202b99"
     },
+    "python.autoComplete.extraPaths": ["__pypackages__/<major.minor>/lib"],
+    "python.analysis.extraPaths": ["__pypackages__/<major.minor>/lib"],
     "peacock.color": "#7fab8b"
 }

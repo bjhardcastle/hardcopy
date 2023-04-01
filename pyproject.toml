@@ -27,7 +27,7 @@ ruff = "ruff --fix src"
 blue = "blue src"
 pytest = "pytest --cov"
 prebuild = {composite = ["blue", "ruff", "pytest"]}
-bump = "bump pyproject.toml" # defaults to minor; `pdm run bump -M` to bump major
+bump = "bump pyproject.toml" # defaults to patch; `pdm run bump -m` to bump minor
 build = {composite = ["prebuild", "bump", "pdm build"]}
 dry-run = {composite = ["prebuild", "pdm build", "pdm publish --no-build --repository https://test.pypi.org/simple"]}
 publish = {composite = ["prebuild", "pdm build", "pdm publish --no-build"]}

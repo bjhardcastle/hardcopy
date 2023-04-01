@@ -6,11 +6,12 @@ import concurrent.futures
 import contextlib
 import doctest
 import logging
+import mmap
 import os
 import pathlib
 import sys
 import tempfile
-from typing import Callable, ClassVar, Optional
+from typing import Any, Callable, ClassVar, Optional
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -20,7 +21,8 @@ else:
 import crc32c
 from loguru import logger
 
-from hardcopy.types import PathLike
+
+CHUNK_SIZE_BYTES = 4096
 
 
 class Algorithms(StrEnum):
@@ -39,15 +41,15 @@ class DataValidater(abc.ABC):
 
     algorithm: str
 
-    def get_checksum(self, path: PathLike) -> str | int:
+    def get_checksum(self, path: pathlib.Path) -> str | int:
         """Return a checksum of the data at `path`."""
         return NotImplemented
 
-    def is_valid_copy(self, src: PathLike, *copy: PathLike) -> bool:
+    def is_valid_copy(self, src: pathlib.Path, *copy: pathlib.Path) -> bool:
         """Every `copy` has identical data to `src`."""
         return NotImplemented
 
-    def is_valid_copytree(self, src_dir: PathLike, copy_dir: PathLike) -> bool:
+    def is_valid_copytree(self, src_dir: pathlib.Path, copy_dir: pathlib.Path) -> bool:
         """Every file in `src_dir` has identical data at same relative path in
         `copy_dir`.
         """
@@ -77,11 +79,19 @@ class ConcurrentValidater(DataValidater):
 
     @staticmethod
     def checksum_in_chunks(
-        fn: Callable[[bytes], str | int], path: pathlib.Path
+        checksum_fn: Callable[[bytes, Any], Any], path: pathlib.Path
     ) -> str | int:
-        """Return a checksum of the data at `path`, breaking into chunks if necessary."""
-        return fn(path.read_bytes())
-
+        """Return a checksum of the data at `path`, breaking into chunks if
+        necessary."""
+        c = 0
+        with path.open('rb') as f:                
+            while True:
+                data = f.read(CHUNK_SIZE_BYTES)
+                if not data:
+                    break
+                c = checksum_fn(data, c)
+        return c
+    
     @staticmethod
     def get_checksum(path: pathlib.Path) -> str | int:
         """Return a checksum of the data at `path`.
@@ -90,34 +100,30 @@ class ConcurrentValidater(DataValidater):
         >>> bool(ConcurrentValidater().get_checksum(tmpfile))
         False
         >>> _ = pathlib.Path(tmpfile).write_text('test')
-        >>> bool(ConcurrentValidater().get_checksum(tmpfile))
-        True
+        >>> ConcurrentValidater().get_checksum(tmpfile)
+        2258662080
         """
-        return __class__.checksum_in_chunks(crc32c.crc32c, path)
+        return __class__.checksum_in_chunks(crc32c.crc32c, pathlib.Path(os.fsdecode(path)))
 
 
     def is_valid_copy(self, src: pathlib.Path, *copy: pathlib.Path) -> bool:
         """Every `copy` has identical data to `src`.
 
-        >>> tmpfile = tempfile.NamedTemporaryFile(delete=False).name
+        >>> tmpfile = pathlib.Path(tempfile.NamedTemporaryFile(delete=False).name)
         >>> ConcurrentValidater().is_valid_copy(tmpfile, tmpfile, tmpfile)
         True
-        >>> tmpfile2 = pathlib.Path(tmpfile).with_suffix('.2')
+        >>> tmpfile2 = tmpfile.with_suffix('.2')
         >>> _ = tmpfile2.write_text('test')
         >>> ConcurrentValidater().is_valid_copy(tmpfile, tmpfile, tmpfile2)
         False
         """
         if src.is_dir():
             return self.is_valid_copytree(src, *copy)
-        path_to_future = {
-            path: self.threadpool.submit(self.get_checksum, path) for path in (src, *copy)
-        }
-        # checksums = self.processpool.map(
-        #         self.get_checksum, (src, *copy)
-        #     )
-        return all(path_to_future[src].result() == path_to_future[c].result() for c in copy)
+        src_checksum = self.get_checksum(src)
+        return all(self.get_checksum(c) == src_checksum for c in copy)
 
-    def is_valid_copytree(self, src_dir: PathLike, copy_dir: PathLike) -> bool:
+
+    def is_valid_copytree(self, src_dir: pathlib.Path, copy_dir: pathlib.Path) -> bool:
         """`copy_dir` has identical data to `src_dir`.
 
         Only checks contents of `src_dir`: extra files in `copy_dir` are

@@ -1,15 +1,15 @@
 import abc
 import doctest
 import os
+import pathlib
 import subprocess
 
 import hardcopy.utils as utils
-from hardcopy.types import PathLike
 
 
 class Copier(abc.ABC):
     @abc.abstractmethod
-    def copy(self, src: PathLike, dest: PathLike, *args, **kwargs) -> None:
+    def copy(self, src: pathlib.Path, dest: pathlib.Path, *args, **kwargs) -> None:
         """Copy `src` to `dest`."""
         raise NotImplementedError
 
@@ -22,7 +22,7 @@ class Robocopy(Copier):
     """
 
     @classmethod
-    def copy(cls, src: PathLike, dest: PathLike, *args, **kwargs) -> None:
+    def copy(cls, src: pathlib.Path, dest: pathlib.Path, *args, **kwargs) -> None:
         """Copy `src` to `dest` using robocopy."""
         # TODO parse args, kwargs
         cls.run(os.fsdecode(src), os.fsdecode(dest), *args, **kwargs)
@@ -30,7 +30,16 @@ class Robocopy(Copier):
     @staticmethod
     def run(*args: str) -> None:
         """Run robocopy with the given string arguments.
-
+            
+        https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/robocopy
+        cmd.append("/e") # incl subdirectories (including empty ones)
+        cmd.append("/xn") # excl newer src files
+        # cmd.append("/xo") # excl older src files
+        # /xc = excl src with same timestamp, different size
+        cmd.append("/j") # unbuffered i/o (for large files)
+        cmd.extend(("/r:3", "/w:10")) # retry count, wait between retries (s)
+        # cmd.append("/mt:24") # multi-threaded: n threads
+        
         >>> Robocopy.run('/?') is None
         True
         """
@@ -39,7 +48,7 @@ class Robocopy(Copier):
             raise TypeError(
                 f'robocopy() only accepts string arguments. Got: {args}'
             )
-        subprocess.run(['robocopy', *args], check=False)
+        subprocess.run(['robocopy', '/mt:8', *args], check=False)
 
 
 if __name__ == '__main__':

@@ -1,17 +1,12 @@
 from __future__ import annotations
 
 import abc
-import asyncio
 import concurrent.futures
 import contextlib
 import doctest
-import logging
-import mmap
-import os
 import pathlib
 import sys
-import tempfile
-from typing import Any, Callable, ClassVar, Optional
+from typing import Any, Callable, ClassVar
 
 if sys.version_info >= (3, 11):
     from enum import StrEnum
@@ -57,7 +52,7 @@ class DataValidater(abc.ABC):
         return NotImplemented
 
 
-class ConcurrentValidater(DataValidater):
+class SerialValidater(DataValidater):
 
     algorithm: str = Algorithms.CRC32C
 
@@ -97,26 +92,29 @@ class ConcurrentValidater(DataValidater):
     def get_checksum(path: pathlib.Path) -> str | int:
         """Return a checksum of the data at `path`.
 
+        >>> import tempfile
         >>> tmpfile = tempfile.NamedTemporaryFile(delete=False).name
-        >>> bool(ConcurrentValidater().get_checksum(tmpfile))
+        >>> tmpfile = pathlib.Path(tmpfile)
+        >>> bool(SerialValidater().get_checksum(tmpfile))
         False
         >>> _ = pathlib.Path(tmpfile).write_text('test')
-        >>> ConcurrentValidater().get_checksum(tmpfile)
+        >>> SerialValidater().get_checksum(tmpfile)
         2258662080
         """
-        return __class__.checksum_in_chunks(
-            crc32c.crc32c, pathlib.Path(os.fsdecode(path))
+        return __class__.checksum_in_chunks(  # type: ignore
+            crc32c.crc32c, path
         )
 
     def is_valid_copy(self, src: pathlib.Path, *copy: pathlib.Path) -> bool:
         """Every `copy` has identical data to `src`.
 
+        >>> import tempfile
         >>> tmpfile = pathlib.Path(tempfile.NamedTemporaryFile(delete=False).name)
-        >>> ConcurrentValidater().is_valid_copy(tmpfile, tmpfile, tmpfile)
+        >>> SerialValidater().is_valid_copy(tmpfile, tmpfile, tmpfile)
         True
         >>> tmpfile2 = tmpfile.with_suffix('.2')
         >>> _ = tmpfile2.write_text('test')
-        >>> ConcurrentValidater().is_valid_copy(tmpfile, tmpfile, tmpfile2)
+        >>> SerialValidater().is_valid_copy(tmpfile, tmpfile, tmpfile2)
         False
         """
         if src.is_dir():
@@ -132,15 +130,17 @@ class ConcurrentValidater(DataValidater):
         Only checks contents of `src_dir`: extra files in `copy_dir` are
         ignored.
 
-        >>> tmpdir = tempfile.TemporaryDirectory(suffix='test').name
-        >>> tmpfile = tempfile.NamedTemporaryFile(delete=False).name
-        >>> ConcurrentValidater().is_valid_copytree(tmpdir, tmpdir)
+        >>> import tempfile
+        >>> tmpdir = pathlib.Path(tempfile.mkdtemp())
+        >>> tmpfile = pathlib.Path(tempfile.NamedTemporaryFile(delete=False).name)
+        >>> SerialValidater().is_valid_copytree(tmpdir, tmpdir)
         True
-        >>> ConcurrentValidater().is_valid_copytree(pathlib.Path(tmpfile).parent, tmpdir)
+        >>> SerialValidater().is_valid_copytree(tmpfile.parent, tmpdir)
         False
         """
-        src_dir = pathlib.Path(os.fsdecode(src_dir))
-        copy_dir = pathlib.Path(os.fsdecode(copy_dir))
+        if not copy_dir.exists():
+            logger.debug(f'{copy_dir} does not exist')
+            return False
         for src_path in src_dir.glob('*'):
             copy_path = copy_dir / src_path.relative_to(src_dir)
             if not copy_path.exists():

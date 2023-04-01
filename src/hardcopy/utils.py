@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 import doctest
+import os
+import pathlib
 import subprocess
 import sys
+
+from hardcopy.types import PathLike
 
 ON_WINDOWS: bool = 'win' in sys.platform
 
@@ -14,11 +20,11 @@ def assert_cli_tool(executable: str) -> None:
     >>> assert_cli_tool("not-robocopy")
     Traceback (most recent call last):
     ...
-    AssertionError: 'not-robocopy' could not be found in PATH.
+    AssertionError
 
     """
     try:
-        completed_process = subprocess.run(
+        process = subprocess.run(
             [executable, '/?'],
             check=False,
             stdout=subprocess.DEVNULL,
@@ -27,15 +33,28 @@ def assert_cli_tool(executable: str) -> None:
     except FileNotFoundError:
         if not ON_WINDOWS and executable == 'robocopy':
             raise AssertionError(
-                f'robocopy is only available on Windows. You are running on: {sys.platform}'
+                f'robocopy is only available on Windows: running on {sys.platform}'
             )
         raise AssertionError(f'{executable!r} could not be found in PATH.')
     else:
-        if completed_process.returncode != 16:
+        if process.returncode != 16:
             raise AssertionError(
-                f'{executable!r} cannot be used: returned exit status {completed_process.returncode}.'
+                f'{executable!r} returned exit status {process.returncode}.'
             )
 
 
+def to_path(*path: PathLike) -> pathlib.Path | tuple[pathlib.Path, ...]:
+    """Convert each `path` to a `pathlib.Path`.
+
+    >>> to_path('test')
+    WindowsPath('test')
+    >>> to_path('test', 'test2')
+    (WindowsPath('test'), WindowsPath('test2'))
+    """
+    if len(path) == 1:
+        return pathlib.Path(os.fsdecode(path[0]))
+    return tuple(pathlib.Path(os.fsdecode(p)) for p in path)
+
+
 if __name__ == '__main__':
-    doctest.testmod(verbose=True)
+    doctest.testmod(verbose=True, optionflags=doctest.IGNORE_EXCEPTION_DETAIL)
